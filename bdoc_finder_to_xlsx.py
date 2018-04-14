@@ -540,7 +540,6 @@ class Bdoc_Finder(object):
                             for each_match in match:
                                 split = each_match.split("'")
                                 hex_decoded = bytearray.fromhex(split[1]).decode("ascii",errors="ignore")
-                                print(hex_decoded)
                                 hex_decoded = hex_decoded.replace('\x00','')
                                 if hex_decoded.find(',') > -1:
                                     found_values_ASN_decoded.append(hex_decoded)
