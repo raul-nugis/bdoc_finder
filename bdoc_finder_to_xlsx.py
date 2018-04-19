@@ -23,7 +23,7 @@ win_unicode_console.enable()
 
 class Bdoc_Finder(object):
 
-    '''This is the package for detecting DSD and extracting their data '''
+    ''' This is the class with functions for detecting DSD and extracting their data '''
 
     import configparser
     
@@ -652,15 +652,9 @@ class Bdoc_Finder(object):
             len(Resulting_CSV)) + ".xlsx"
         filename = os.path.join(os.getcwd(), basename)
 
-        ###dataframe['Contents'] = dataframe['Contents'].apply(lambda x: unicode(x))
-        ###dataframe['Contents'] = dataframe['Contents'].str.decode('iso-8859-1').str.encode('utf-8')
-
-        #dataframe = dataframe.applymap(lambda x: x.encode('unicode_escape').decode('utf-8') if isinstance(x, str) else x)
-
         writer = pandas.ExcelWriter(filename, engine='xlsxwriter')
         dataframe.to_excel(writer, sheet_name='Data')
         writer.save()
-        #dataframe.to_excel(filename, encoding='utf8')
 
         print('File',basename,'of',str(len(Resulting_CSV)),'lines written.')
 
