@@ -1,5 +1,5 @@
 # bdoc_finder
-Finds digitally signed document (DSD) BDOC or ASICE files and exports some of their data.
+Finds digitally signed document (DSD) BDOC or ASICE files and exports some of their data. Works with Python 3.5.3
 
 This script will read raw images, mounted image and / or DSD candidate files from subfolder.
 Workflow is somewhat different if it is candidate file read from folder, or candidate file
