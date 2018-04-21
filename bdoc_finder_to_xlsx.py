@@ -26,6 +26,7 @@ class Bdoc_Finder(object):
     ''' This is the class with functions for detecting DSD and extracting their data '''
 
     import configparser
+    import sys
     
     # Reads variables from text file 'config.ini'
     # If fails reading config,ini it will use built-in variables and signatures
@@ -43,7 +44,7 @@ class Bdoc_Finder(object):
             "XML","tags_to_find_Base64").split('\n')[1:]
         tags_to_find_plaintext = config.get(
             "XML","tags_to_find_plaintext").split('\n')[1:]
-        useful_attributes = config.get("ASN.1","useful_attributes").split('\n')[1:]
+        position = config.get("ASN.1","useful_attributes").split('\n')[1:]
     except:
         print('No config.ini file or wrong structure of config.ini file, \
         falling back to defauls.')
@@ -74,17 +75,17 @@ class Bdoc_Finder(object):
             '{http://uri.etsi.org/01903/v1.3.2#}ClaimedRole',
             '{http://uri.etsi.org/01903/v1.3.2#}ByName',
             '{http://uri.etsi.org/01903/v1.3.2#}ProducedAt']
-        useful_attributes = [
-            'UTF8String',
-            'PrintableString',
-            'UTCTime',
-            'BMPString']
+        position = ['3','4','5']
         # These regexes exceed recommended 79 character wrapping lenghts style
         # Wrapping them, given that they have "" and '' and / and \ and 'binary' 
         # is exceedingly difficult.
         header_hex_code  = r"b'^PK\x03\x04(.|\s){26}mimetype(.|\s){0,36}(application\/vnd\.etsi\.asic\-e\+zip|K,\(\\\xc8\xc9LN,\xc9\xcc\xcf\xd3\/\xcbK\xd1K)'"
         footer_hex_code = r"b'PK\x05\x06\x00\x00(.|\s){14}.*?(\x00{2}|.*[ -~])'"
         mounted_size = 0
+    
+    # Can read folder where files are from commandline
+    if len(sys.argv) > 1:
+        file = str(sys.argv[1])
 
     def __init__(self):
        
@@ -120,6 +121,8 @@ class Bdoc_Finder(object):
         else:
             self.carve is False
         
+        self.position =  list(map(int, self.position))
+
         self.clusters_per_sectors = int(self.clusters_per_sectors)
         self.sector = int(self.sector)
         self.maximum_filesize = int(self.maximum_filesize)
@@ -300,9 +303,6 @@ class Bdoc_Finder(object):
         This will test if data is ZIP and DSD and export signature
         """  
 
-        from zipfile import ZipFile
-        import io
-
         # Variables and Checks #
 
         testing_for_DSD = False
@@ -393,8 +393,6 @@ class Bdoc_Finder(object):
         This will parce XML and export meaningful XML elements and ASN.1 encoded data.
         """ 
 
-        import xml.etree.ElementTree as ET
-
         # Variables to store results #
 
         found_values_text,found_values_Base64,found_values_ASN_1 = [],[],[]
@@ -445,18 +443,11 @@ class Bdoc_Finder(object):
         This will decode ASN.1 and export meaningful data.
         """
 
-        import re
-        import base64
-        from pyasn1.codec.der import decoder as decoder
-
         # Variables to store results #
 
         found_values_ASN_decoded = []
-        additional_field = ''
-        short_values = ''
+        short_values = []
         date_to_add = ''
-        if self.format_ == 'Short':
-            name_and_code = re.compile("(.|\s){1,26},(.|\s){1,26},\d{11}")
 
         # Decode X509Certificate and Responses #
 
@@ -494,103 +485,47 @@ class Bdoc_Finder(object):
                     print('Base64 decode failed in',ASN_tag)
                     found_values_ASN_decoded.append('Base64_decode_failed',e)
                     break
-
-                # This is to prepare for manual replacing of certain non-ASCII 
-                # characters in names for difficult decode cases
-                
-                character = re.compile(b'(.){0,12}[^\x00-\x7F](.){0,12},(.){0,26},\d{11}')
-                character2 = re.compile(b'(.){0,24},(.){0,12}[^\x00-\x7F](.){0,12},\d{11}')
-                result = re.search(character,decoded_base64)
-                result2 = re.search(character2,decoded_base64)
-
-                if result:
-                    if result.group(0) is not None:
-                        additional_field = str(result.group(0))
-                        additional_field = additional_field.replace("b'","'")
-                        additional_field = additional_field.replace('"','')
-                        additional_field = additional_field.replace("'","")
-                if result2:
-                    if result2.group(0) is not None:
-                        additional_field = str(result2.group(0))
-                        additional_field = additional_field.replace("b'","'")
-                        additional_field = additional_field.replace('"','')
-                        additional_field = additional_field.replace("'","")
                 try:
                     decoded_ASN_1_datablock = decoder.decode(decoded_base64)
+
+                    # Makes short list, see 'config.ini' #
+
+                    if self.format_ == 'Short':
+                        ASN_objects = decoded_ASN_1_datablock[0].getComponentByPosition(0)[5]
+                        lname = ASN_objects.getComponentByPosition(4)[0][1]
+                        fname = ASN_objects.getComponentByPosition(5)[0][1]
+                        if lname == 'Corporate Signature':
+                            pcode = ASN_objects.getComponentByPosition(0)[0][1]
+                        else:
+                            pcode = ASN_objects.getComponentByPosition(6)[0][1]
+                        short_values.append(lname)
+                        short_values.append(fname)
+                        short_values.append(pcode)
+                    else:
+                        
+                        # Makes long list, see 'config.ini' #
+                        # place = 3, this is about Certification Authority
+                        # place = 5, this is personal data
+                        # place = 4, this is Cert validity dates
+
+                        for place in self.position:
+                            ASN_objects = decoded_ASN_1_datablock[0].getComponentByPosition(0)[place]
+                            for name_objects in range(len(ASN_objects)):
+                                name_object = ASN_objects.getComponentByPosition(name_objects)
+                                if place == 4:
+                                    ASN_value_to_add = name_object
+                                    found_values_ASN_decoded.append(ASN_value_to_add)
+                                
+                                else:
+                                    for ASN_object in range(len(name_object)):
+                                        ASN_value_to_add = name_object.getComponentByPosition(ASN_object)[1]
+                                        found_values_ASN_decoded.append(ASN_value_to_add)
+
                 except BaseException as e:
                     print('ASN.1 decode failed in',ASN_tag)
                     found_values_ASN_decoded.append('ASN.1_decode_failed',e)
                     break
-                decoded_ASN_1_datablock = str(decoded_ASN_1_datablock[0])
-
-                for useful_attribute in self.useful_attributes:
-                    
-                    # This is manual decoding of especially rare characters 
-                    # for which 'BMPString' datatype seems to be used
-                    # which stores them in HEX instead of text
-                    # In large sample case of 3873 (3869 signed) files there was only one such 
-                    # name encountered. The name will be retrieved, but this character
-                    # will remain not decoded correctly
-
-                    if useful_attribute == 'BMPString':
-                        useful_attribute_prepared_string = re.escape(
-                            useful_attribute) + ".{1,110}hexValue='.{1,110}'"
-                        if re.findall(useful_attribute_prepared_string, decoded_ASN_1_datablock):
-                            match = re.findall(useful_attribute_prepared_string, decoded_ASN_1_datablock)
-                            for each_match in match:
-                                split = each_match.split("'")
-                                hex_decoded = bytearray.fromhex(split[1]).decode("ascii",errors="ignore")
-                                hex_decoded = hex_decoded.replace('\x00','')
-                                if hex_decoded.find(',') > -1:
-                                    found_values_ASN_decoded.append(hex_decoded)
-                                    if self.format_ == 'Short':
-                                        short_values = hex_decoded
-                                    
-                    useful_attribute_prepared_string = re.escape(   #Administratively 
-                    # set max distance of ASN.1 attr value
-                        useful_attribute) + "\('.{0,50}'"
-                    if re.findall(useful_attribute_prepared_string, decoded_ASN_1_datablock):
-                        match = re.findall(useful_attribute_prepared_string, decoded_ASN_1_datablock)
-                        match_iterator = 0
-                        for each_match in match:
-                            
-                            split = each_match.split("'")
-                            found_values_ASN_decoded.append(split[1])
-
-                            # Makes short list, see 'config.ini' #
-
-                            if self.format_ == 'Short':
-                                if split[1] == 'Corporate Signature':
-                                    corporate_match = match[match_iterator+1]
-                                    split_ = corporate_match.split("'")
-                                    short_values = split_[1]
-                                if re.findall(name_and_code,split[1]):
-                                    match_2 = re.search(name_and_code,split[1])
-                                    if len(match_2.group(0)) > 0:
-                                        short_values = match_2.group(0)
-
-                            else:
-                                pass
-
-                            match_iterator += 1
-
-                            # Replace some hard-to-decode characters #
-                            if split[1] == 'digital signature' and additional_field is not '':
-                                additional_field = additional_field.replace("'","")
-                                additional_field = re.sub('^.{0,40}03U.{2}04.{2}03.{2}0c(.x..|.)?',
-                                '',additional_field)
-                                hex_ = [
-                                    r'\xc3\x9c',r'\xc3\x96',
-                                    r'\xc3\x95',r'\xc3\x84',
-                                    r'\xc5\xa0',r'\xc5\xbd',
-                                    '\xc4\xa0']
-                                utf_ = ['Ü','Ö','Õ','Ä','Š','Ž','Ġ']
-                                for orig,repl in zip(hex_,utf_):
-                                    additional_field = str(additional_field.replace(orig,repl))
-                                short_values = additional_field
-                                found_values_ASN_decoded.append(additional_field)
-                                
-
+                               
         return found_values_ASN_decoded,short_values,date_to_add
     
     def write_recovered_data_to_file(self,data,destination):
@@ -609,12 +544,11 @@ class Bdoc_Finder(object):
 
         ''' Write recovered attributive data to file '''
 
-        from datetime import datetime
-
         if len(Resulting_CSV) == 0:
             print('No attributes were written.')
             return
 
+        # Make unique filename
         current_time_to_filename = datetime.now().strftime('%d_%m_%Y_%H_%M_%S_%f')
         basename = current_time_to_filename + "_recovered_attributes_" + str(
             len(Resulting_CSV)) + ".txt"
@@ -631,37 +565,18 @@ class Bdoc_Finder(object):
 
         print('File',basename,'of',str(len(Resulting_CSV)),'lines written.')
 
-    def write_links_to_xlsx(self,Resulting_CSV):
-        
-        ''' Create MS Excel '''
-        
-        import pandas
-
-        from datetime import datetime
-
-        if len(Resulting_CSV) == 0:
-            print('No attributes were written.')
-            return
-        
-        dataframe = pandas.DataFrame([sub.split(';') for sub in Resulting_CSV])
-        dataframe.columns = dataframe.iloc[0]
-        dataframe = dataframe[1:]
-
-        current_time_to_filename = datetime.now().strftime('%d_%m_%Y_%H_%M_%S_%f')
-        basename = current_time_to_filename + "_recovered_attributes_" + str(
-            len(Resulting_CSV)) + ".xlsx"
-        filename = os.path.join(os.getcwd(), basename)
-
-        writer = pandas.ExcelWriter(filename, engine='xlsxwriter')
-        dataframe.to_excel(writer, sheet_name='Data')
-        writer.save()
-
-        print('File',basename,'of',str(len(Resulting_CSV)),'lines written.')
-
 if __name__ == "__main__":
     
     import os
     import re
+    import io
+    import base64
+    from datetime import datetime
+    from zipfile import ZipFile
+    import xml.etree.ElementTree as ET
+    from pyasn1.codec.der import decoder as decoder
+
+    startTime = datetime.now()
 
     # Variables from setup #
 
@@ -738,10 +653,11 @@ if __name__ == "__main__":
 
                     # Collect results #
 
-                    short_line_to_save = destination +';'+ "Signature_" + str(iterator)+ ';' + short_values + ';' + date_to_add
-
-                    if testing_for_bdoc == True:
-                        Short_csv.append(short_line_to_save)
+                    if len(short_values) > 0:
+                        if testing_for_bdoc == True:    
+                            for line_ in short_values:
+                                short_line_to_save = destination +';'+ "Signature_" + str(iterator)+ ';' + line_ + ';' + date_to_add
+                                Short_csv.append(short_line_to_save)
 
                     for each_value in found_values_text:
                         line_to_save = destination +';'+ list_of_files +';XML;'+ each_value +';'
@@ -823,8 +739,11 @@ if __name__ == "__main__":
                             
                             # Collect results #
 
-                            short_line_to_save = destination +';'+ "Signature_" + str(iterator)+ ';' + short_values + ';' + date_to_add
-                            Short_csv.append(short_line_to_save)
+                            if len(short_values) > 0:
+                                if testing_for_bdoc == True:    
+                                    for line_ in short_values:
+                                        short_line_to_save = destination +';'+ "Signature_" + str(iterator)+ ';' + line_ + ';' + date_to_add
+                                        Short_csv.append(short_line_to_save)
 
                             for each_value in found_values_text:
                                 line_to_save = destination +';'+ list_of_files +';XML;'+ each_value +';'
@@ -842,15 +761,7 @@ if __name__ == "__main__":
     # To export to CSV
 
     if len(Resulting_CSV) > 1 and Bdoc_Finder().format_ == 'Long':
-        try:
-            Bdoc_Finder().write_links_to_xlsx(Resulting_CSV)
-        except:
-            print('Could not write to XLSX, writing to CSV instead.')
-            Bdoc_Finder().write_links_to_file(Resulting_CSV)
-
+        Bdoc_Finder().write_links_to_file(Resulting_CSV)
     if len(Short_csv) > 1 and Bdoc_Finder().format_ == 'Short':
-        try:
-            Bdoc_Finder().write_links_to_xlsx(Short_csv)
-        except:
-            print('Could not write to XLSX, writing to CSV instead.')
-            Bdoc_Finder().write_links_to_file(Short_csv)
+        Bdoc_Finder().write_links_to_file(Short_csv)
+    print('Script completed in',datetime.now() - startTime)
