@@ -492,15 +492,13 @@ class Bdoc_Finder(object):
 
                     if self.format_ == 'Short':
                         ASN_objects = decoded_ASN_1_datablock[0].getComponentByPosition(0)[5]
-                        lname = ASN_objects.getComponentByPosition(4)[0][1]
-                        fname = ASN_objects.getComponentByPosition(5)[0][1]
+                        lname = ASN_objects.getComponentByPosition(4)[0][1] + ';'
+                        fname = ASN_objects.getComponentByPosition(5)[0][1]  + ';'
                         if lname == 'Corporate Signature':
                             pcode = ASN_objects.getComponentByPosition(0)[0][1]
                         else:
                             pcode = ASN_objects.getComponentByPosition(6)[0][1]
-                        short_values.append(lname)
-                        short_values.append(fname)
-                        short_values.append(pcode)
+                        short_values.append(lname + fname + pcode)
                     else:
                         
                         # Makes long list, see 'config.ini' #
@@ -551,7 +549,7 @@ class Bdoc_Finder(object):
         # Make unique filename
         current_time_to_filename = datetime.now().strftime('%d_%m_%Y_%H_%M_%S_%f')
         basename = current_time_to_filename + "_recovered_attributes_" + str(
-            len(Resulting_CSV)) + ".txt"
+            len(Resulting_CSV)) + ".csv"
         filename = os.path.join(os.getcwd(), basename)
 
         line_by_line_file = open(filename, 'w', encoding="utf-8")
@@ -587,7 +585,7 @@ if __name__ == "__main__":
     # Variables to collect results #
 
     line_to_save = 'File;Signed docs;Layer;Contents;Contents 2'
-    short_line_to_save = 'File;No of Sign;Name,Surname,Personal Code;Date'
+    short_line_to_save = 'File;No of Sign;Name;Surname;Personal Code;Date'
 
     Resulting_CSV,Short_csv = [line_to_save],[short_line_to_save]
 
