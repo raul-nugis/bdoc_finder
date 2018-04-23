@@ -56,7 +56,7 @@ class Bdoc_Finder(object):
         position = config.get("ASN.1","useful_attributes").split('\n')[1:]
     except:
         print('No config.ini file or wrong structure of config.ini file, \
-        falling back to defauls.')
+        falling back to defaults.')
         image,file,result,mounted  = 'Image', 'Files', 'Results', ''
         format_ = 'Short'
         carve = 'False'
@@ -104,10 +104,27 @@ class Bdoc_Finder(object):
         import glob
         import ast
         
+        # Additional comments and explanations on variables are in 'config.ini'
         if self.scriptfolder == 'script':
             self.scriptfolder = os.path.dirname(os.path.realpath(__file__))
-        else:
+        elif self.scriptfolder == 'local':
             self.scriptfolder = os.getcwd()
+        else:
+            self.scriptfolder = os.path.dirname(os.path.realpath(__file__))
+
+        if self.format_ == 'Short':
+            self.format_ = 'Short'
+        elif self.format_ == 'Long':
+            self.format_ = 'Long'
+        else:
+            self.format_ = 'Long'
+
+        if self.carve == 'True':
+            self.carve is True
+        elif self.carve == 'False':
+            self.carve is False
+        else:
+            self.carve is False
 
         self.images = [] 
         self.image = os.path.join(self.scriptfolder, self.image, '*')
@@ -121,20 +138,10 @@ class Bdoc_Finder(object):
         self.file = os.path.join(self.scriptfolder, self.file, '*')
         for filename in sorted(glob.glob(self.file)):
             self.files.append(filename)
-        
+
         result = os.path.join(self.scriptfolder, self.result)
         if not os.path.exists(result):
             os.makedirs(result)
-        
-        if self.format_ == 'Short':
-            self.format_ = 'Short'
-        else:
-            self.format_ = 'Long'
-
-        if self.carve == 'True':
-            self.carve is True
-        else:
-            self.carve is False
         
         self.position =  list(map(int, self.position))
 
