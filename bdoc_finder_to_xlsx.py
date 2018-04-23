@@ -21,6 +21,14 @@ separation of DSDs from other ZIP like containers.
 import win_unicode_console, os, logging
 win_unicode_console.enable()
 
+import re
+import io
+import base64
+from datetime import datetime
+from zipfile import ZipFile
+import xml.etree.ElementTree as ET
+from pyasn1.codec.der import decoder as decoder
+
 class Bdoc_Finder(object):
 
     ''' This is the class with functions for detecting DSD and extracting their data '''
@@ -39,6 +47,7 @@ class Bdoc_Finder(object):
         cluster_offset,maximum_filesize = config["Geometry"].values()
         header_hex_code,footer_hex_code,header_lenght = config["Signature"].values()
         format_ = config.get("Reporting","format_")
+        scriptfolder = config.get("Reporting","scriptfolder")
         carve = config.get("Reporting","carve")
         tags_to_find_Base64 = config.get(
             "XML","tags_to_find_Base64").split('\n')[1:]
@@ -49,8 +58,9 @@ class Bdoc_Finder(object):
         print('No config.ini file or wrong structure of config.ini file, \
         falling back to defauls.')
         image,file,result,mounted  = 'Image', 'Files', 'Results', ''
-        format_ = 'Long'
+        format_ = 'Short'
         carve = 'False'
+        scriptfolder = 'script'
         header_lenght = '105'
         clusters_per_sectors,sector,\
         cluster_offset,maximum_filesize = '8','512','0','10000'
@@ -94,8 +104,13 @@ class Bdoc_Finder(object):
         import glob
         import ast
         
+        if self.scriptfolder == 'script':
+            self.scriptfolder = os.path.dirname(os.path.realpath(__file__))
+        else:
+            self.scriptfolder = os.getcwd()
+
         self.images = [] 
-        self.image = os.path.join(os.getcwd(), self.image, '*')
+        self.image = os.path.join(self.scriptfolder, self.image, '*')
         for filename in sorted(glob.glob(self.image)):
             self.images.append(filename)
         if len(self.mounted) > 0:
@@ -103,11 +118,11 @@ class Bdoc_Finder(object):
             self.mounted_size = int(self.mounted_size)
 
         self.files = [] 
-        self.file = os.path.join(os.getcwd(), self.file, '*')
+        self.file = os.path.join(self.scriptfolder, self.file, '*')
         for filename in sorted(glob.glob(self.file)):
             self.files.append(filename)
         
-        result = os.path.join(os.getcwd(), self.result)
+        result = os.path.join(self.scriptfolder, self.result)
         if not os.path.exists(result):
             os.makedirs(result)
         
@@ -522,6 +537,7 @@ class Bdoc_Finder(object):
                 except BaseException as e:
                     print('ASN.1 decode failed in',ASN_tag)
                     found_values_ASN_decoded.append('ASN.1_decode_failed',e)
+                    short_values.append('ASN.1_decode_failed',e)
                     break
                                
         return found_values_ASN_decoded,short_values,date_to_add
@@ -532,7 +548,7 @@ class Bdoc_Finder(object):
         This will save recovered file data to a file in Results folder, 
         provided a name was given.
         """    
-        destination = os.path.join(os.getcwd(),self.result,destination)
+        destination = os.path.join(self.scriptfolder,self.result,destination)
         if len(data) > 0:
             file = open(destination, 'wb')
             file.write(data)
@@ -550,9 +566,9 @@ class Bdoc_Finder(object):
         current_time_to_filename = datetime.now().strftime('%d_%m_%Y_%H_%M_%S_%f')
         basename = current_time_to_filename + "_recovered_attributes_" + str(
             len(Resulting_CSV)) + ".csv"
-        filename = os.path.join(os.getcwd(), basename)
+        filename = os.path.join(self.scriptfolder, basename)
 
-        line_by_line_file = open(filename, 'w', encoding="utf-8")
+        line_by_line_file = open(filename, 'w')
         for line in Resulting_CSV:
             try:
                 line_by_line_file.write("%s\n" % line)
@@ -561,19 +577,10 @@ class Bdoc_Finder(object):
 
         line_by_line_file.close()
 
-        print('File',basename,'of',str(len(Resulting_CSV)),'lines written.')
+        print('File',basename,'of',str(len(Resulting_CSV)),'lines written in folder',self.scriptfolder)
 
 if __name__ == "__main__":
     
-    import os
-    import re
-    import io
-    import base64
-    from datetime import datetime
-    from zipfile import ZipFile
-    import xml.etree.ElementTree as ET
-    from pyasn1.codec.der import decoder as decoder
-
     startTime = datetime.now()
 
     # Variables from setup #
@@ -581,6 +588,7 @@ if __name__ == "__main__":
     files = Bdoc_Finder().files
     images = Bdoc_Finder().images
     carve = Bdoc_Finder().carve
+    scriptfolder = Bdoc_Finder().scriptfolder
 
     # Variables to collect results #
 
@@ -762,4 +770,4 @@ if __name__ == "__main__":
         Bdoc_Finder().write_links_to_file(Resulting_CSV)
     if len(Short_csv) > 1 and Bdoc_Finder().format_ == 'Short':
         Bdoc_Finder().write_links_to_file(Short_csv)
-    print('Script completed in',datetime.now() - startTime)
+    print('Script completed in',datetime.now() - startTime,'the results were written in "',Bdoc_Finder().format_,'" format')
