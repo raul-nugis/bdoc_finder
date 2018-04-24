@@ -181,8 +181,8 @@ class Bdoc_Finder(object):
         
         try:
             file = open(image, 'rb')
-        except BaseException as e:
-            print('Could not open',image,'because of',e)
+        except Exception as e:
+            print('Could not open',image,'because of',str(e))
             return
         if image.find('PHYSICALDRIVE') == -1:
             _clusters_total = int(os.path.getsize(image)/self._cluster)
@@ -209,7 +209,7 @@ class Bdoc_Finder(object):
 
             try:
                 current_cluster = file.read(self._cluster)
-            except BaseException as e:
+            except:
                 return start_carve_sector, end_carve_sector
 
             current__cluster += 1
@@ -352,9 +352,7 @@ class Bdoc_Finder(object):
                 pass
             else:
                 return comment,testing_for_DSD,list_of_DSD,unziped_SIG,list_of_files
-        except BaseException as e:
-            pass
-
+        except:
             return comment,testing_for_DSD,list_of_DSD,unziped_SIG,list_of_files
 
         # Check if signature file exists #
@@ -405,8 +403,8 @@ class Bdoc_Finder(object):
                                 unziped_SIG.append(unzipped_file)
                             else:
                                 unziped_SIG.append('')
-                    except BaseException as e:
-                        print('Could not extract signature file from DSD because of',e)
+                    except Exception as e:
+                        print('Could not extract signature file from DSD because of',str(e))
                         unziped_SIG.append('')
                         
             return comment,testing_for_DSD,list_of_DSD,unziped_SIG,list_of_files
@@ -426,11 +424,11 @@ class Bdoc_Finder(object):
 
         try:
             root_f = ET.fromstring(unziped_SIG)
-        except BaseException as e:
+        except:
             try:
                 root_f = ET.fromstring(unziped_SIG[0])
-            except BaseException as e:
-                print('XML parcing failed:',e)
+            except TypeError as e:
+                print('XML parcing failed:',str(e))
                 return found_values_text,found_values_Base64,found_values_ASN_1
 
         last_step = root_f.findall(".//")
@@ -482,9 +480,11 @@ class Bdoc_Finder(object):
 
             if ASN_tag =='EncapsulatedTimeStamp' or ASN_tag =='EncapsulatedOCSPValue':
                 try:
-                    decoded_base64_OSCP = base64.b64decode(encoded_ASN_1_datablock)            
-                except BaseException as e:
-                    found_values_ASN_decoded.append('Time decode failed',e)
+                    decoded_base64_OSCP = base64.b64decode(encoded_ASN_1_datablock)
+                except:
+                    error = 'Base64 decode failed in ' + ASN_tag
+                    found_values_ASN_decoded.append(error)
+                    short_values.append(error)
                     break
                 date = re.compile(b'(\d{14}Z)')
                 result_date = re.search(date,decoded_base64_OSCP)
@@ -505,9 +505,10 @@ class Bdoc_Finder(object):
             if ASN_tag =='X509Certificate':
                 try:
                     decoded_base64 = base64.b64decode(encoded_ASN_1_datablock)
-                except BaseException as e:
-                    print('Base64 decode failed in',ASN_tag)
-                    found_values_ASN_decoded.append('Base64_decode_failed',e)
+                except:
+                    error = 'Base64 decode failed in ' + ASN_tag
+                    found_values_ASN_decoded.append(error)
+                    short_values.append(error)
                     break
                 try:
                     decoded_ASN_1_datablock = decoder.decode(decoded_base64)
@@ -543,10 +544,10 @@ class Bdoc_Finder(object):
                                         ASN_value_to_add = name_object.getComponentByPosition(ASN_object)[1]
                                         found_values_ASN_decoded.append(ASN_value_to_add)
 
-                except BaseException as e:
-                    print('ASN.1 decode failed in',ASN_tag)
-                    found_values_ASN_decoded.append('ASN.1_decode_failed',e)
-                    short_values.append('ASN.1_decode_failed',e)
+                except Exception as e:
+                    error = 'ASN.1 decode failed in ' + ASN_tag + ': ' + str(e)
+                    found_values_ASN_decoded.append(error)
+                    short_values.append(error)
                     break
                                
         return found_values_ASN_decoded,short_values,date_to_add
@@ -577,12 +578,15 @@ class Bdoc_Finder(object):
             len(Resulting_CSV)) + ".csv"
         filename = os.path.join(self.scriptfolder, basename)
 
-        line_by_line_file = open(filename, 'w')
+        if self.format_ == 'Long':
+            line_by_line_file = open(filename, 'w', encoding = 'utf-8')
+        else:
+            line_by_line_file = open(filename, 'w')
         for line in Resulting_CSV:
             try:
                 line_by_line_file.write("%s\n" % line)
-            except BaseException as e:
-                print("Failed writing line-to-line to file:",e)
+            except Exception as e:
+                print("Failed writing line-to-line to file:",str(e))
 
         line_by_line_file.close()
 
@@ -641,8 +645,8 @@ if __name__ == "__main__":
                             print('Possible unsigned BDOC',destination,'detected, file size',str(len(data)))
                         else:
                             print(destination,'failed BDOC test, file size',str(len(data)))
-                except BaseException as e:
-                    print('Failed trying to check if',destination,'ZIP because of',e)
+                except Exception as e:
+                    print('Failed trying to check if',destination,'ZIP because of',str(e))
                 
                 for comment in comments:
                     
@@ -728,8 +732,8 @@ if __name__ == "__main__":
                                 if carve == 'True':
                                     Bdoc_Finder().write_recovered_data_to_file(data,destination)                
                             
-                        except BaseException as e:
-                            print('Failed trying to check if',destination,'ZIP because of',e)   
+                        except Exception as e:
+                            print('Failed trying to check if',destination,'ZIP because of',str(e))   
                     
                         for comment in comments:
                             
