@@ -23,6 +23,10 @@ win_unicode_console.enable()
 
 import re
 import io
+import sys
+import glob
+import ast
+import configparser
 import base64
 from datetime import datetime
 from zipfile import ZipFile
@@ -32,15 +36,18 @@ from pyasn1.codec.der import decoder as decoder
 class Bdoc_Finder(object):
 
     ''' This is the class with functions for detecting DSD and extracting their data '''
-
-    import configparser
-    import sys
     
+    # Checks for config.ini depending on execution in local or remote dir
+    if os.path.dirname(os.path.realpath(__file__)) == os.getcwd():
+        config_ = 'config.ini'
+    else:
+        config_ = os.path.join(os.path.dirname(os.path.realpath(__file__)),'config.ini')
+
     # Reads variables from text file 'config.ini'
     # If fails reading config,ini it will use built-in variables and signatures
-
+        
     config = configparser.ConfigParser()
-    config.read('config.ini')
+    config.read(config_)
     try:
         image,mounted,mounted_size,file,result  = config["Pathes"].values()
         clusters_per_sectors,sector,\
@@ -99,11 +106,6 @@ class Bdoc_Finder(object):
 
     def __init__(self):
        
-        import os
-        import re
-        import glob
-        import ast
-        
         # Additional comments and explanations on variables are in 'config.ini'
         if self.scriptfolder == 'script':
             self.scriptfolder = os.path.dirname(os.path.realpath(__file__))
