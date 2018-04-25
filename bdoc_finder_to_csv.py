@@ -378,6 +378,9 @@ class Bdoc_Finder(object):
                     extra = str(extra)
                     extra = extra.replace(';','')
                     extra_file = comment_file + ', extra: ' + str(extra)
+                    if sys.version_info < (3, 0):
+                        extra_file = '\\x'.join(x.encode('hex') for x in extra_file)
+                        extra_file = extra_file.decode('utf-8', errors = 'ignore')
                 else:
                     extra_file = comment_file + ', no_extra'
                 comment.append(extra_file)
@@ -523,7 +526,7 @@ class Bdoc_Finder(object):
                             pcode = ASN_objects.getComponentByPosition(0)[0][1]
                         else:
                             pcode = ASN_objects.getComponentByPosition(6)[0][1]
-                        short_values.append(lname + fname + pcode)
+                        short_values.append(lname + fname + pcode)                        
                     else:
                         
                         # Makes long list, see 'config.ini' #
@@ -567,7 +570,7 @@ class Bdoc_Finder(object):
     def write_links_to_file(self,Resulting_CSV):
 
         ''' Write recovered attributive data to file '''
-
+        
         if len(Resulting_CSV) == 0:
             print('No attributes were written.')
             return
@@ -578,10 +581,12 @@ class Bdoc_Finder(object):
             len(Resulting_CSV)) + ".csv"
         filename = os.path.join(self.scriptfolder, basename)
 
-        if self.format_ == 'Long':
+        if self.format_ == 'Long' and sys.version_info >= (3, 0):
+            # Encoding issues have not been solved for Python 2
             line_by_line_file = open(filename, 'w', encoding = 'utf-8')
         else:
             line_by_line_file = open(filename, 'w')
+
         for line in Resulting_CSV:
             try:
                 line_by_line_file.write("%s\n" % line)
@@ -636,7 +641,7 @@ if __name__ == "__main__":
                     if testing_for_bdoc is True:
                         if carve == 'True':
                             Bdoc_Finder().write_recovered_data_to_file(data,destination)
-                        print(destination,'tested as BDOC file size of',str(len(data)))
+                        print(destination,'tested as BDOC, file size of',str(len(data)))
                     else:
                         if any("manifest.xml" in _file for _file in list_of_DSD):
                             # Known files having manifest.xml but there are files
@@ -652,7 +657,7 @@ if __name__ == "__main__":
                     
                     # Add ZIP #
                     
-                    line_to_save = destination +';'+ list_of_files +';ZIP;'+ comment +';'
+                    line_to_save = destination +';'+ list_of_files +';ZIP;' + comment +';'
                     if testing_for_bdoc == True:
                         Resulting_CSV.append(line_to_save)
 
@@ -675,7 +680,8 @@ if __name__ == "__main__":
                     if len(short_values) > 0:
                         if testing_for_bdoc == True:    
                             for line_ in short_values:
-                                short_line_to_save = destination +';'+ "Signature_" + str(iterator)+ ';' + line_ + ';' + date_to_add
+                                short_line_to_save = destination +';'+ "Signature_" + str(iterator)+ ';'\
+                                 + line_ + ';' + date_to_add
                                 Short_csv.append(short_line_to_save)
 
                     for each_value in found_values_text:
@@ -723,7 +729,7 @@ if __name__ == "__main__":
                             # Write recovered files #
                             
                             if testing_for_bdoc is True:
-                                print(destination,'recovered a BDOC file size of',str(len(data)))
+                                print(destination,'recovered a BDOC, file size of',str(len(data)))
                                 if carve == 'True':
                                     Bdoc_Finder().write_recovered_data_to_file(data,destination)
                             else:
@@ -761,7 +767,8 @@ if __name__ == "__main__":
                             if len(short_values) > 0:
                                 if testing_for_bdoc == True:    
                                     for line_ in short_values:
-                                        short_line_to_save = destination +';'+ "Signature_" + str(iterator)+ ';' + line_ + ';' + date_to_add
+                                        short_line_to_save = destination +';'+ "Signature_" + str(iterator)+ ';'\
+                                         + line_ + ';' + date_to_add
                                         Short_csv.append(short_line_to_save)
 
                             for each_value in found_values_text:
@@ -783,4 +790,6 @@ if __name__ == "__main__":
         Bdoc_Finder().write_links_to_file(Resulting_CSV)
     if len(Short_csv) > 1 and Bdoc_Finder().format_ == 'Short':
         Bdoc_Finder().write_links_to_file(Short_csv)
-    print('Script completed in',datetime.now() - startTime,'the results were written in "',Bdoc_Finder().format_,'" format')
+    time = datetime.now() - startTime
+    print('Script completed in',time,
+    'the results were written in "',Bdoc_Finder().format_,'" format')
