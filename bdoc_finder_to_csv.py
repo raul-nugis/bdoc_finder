@@ -1,6 +1,6 @@
 # coding: utf-8
 
-''' 
+""" 
 This script will read raw images, mounted image
 and / or DSD candidate files from subfolder.
 Workflow is somewhat different if it is candidate 
@@ -13,7 +13,7 @@ Checks for potential files read from folders
 Potentially DSD files with wrong structure are marked 
 as malformed. Check on existent files enables quick 
 separation of DSDs from other ZIP like containers.
-'''
+"""
 
 # This addresses Dec 2017 bug on Win10
 # https://bugs.python.org/issue32245
@@ -28,14 +28,20 @@ import glob
 import ast
 import configparser
 import base64
+import codecs
 from datetime import datetime
 from zipfile import ZipFile
 import xml.etree.ElementTree as ET
 from pyasn1.codec.der import decoder as decoder
 
+# If Python v 2
+if sys.version_info < (3, 0):
+    reload(sys)  
+    sys.setdefaultencoding('utf8')
+
 class Bdoc_Finder(object):
 
-    ''' This is the class with functions for detecting DSD and extracting their data '''
+    """ This is the class with functions for detecting DSD and extracting their data """
     
     # Checks for config.ini depending on execution in local or remote dir
     if os.path.dirname(os.path.realpath(__file__)) == os.getcwd():
@@ -45,6 +51,7 @@ class Bdoc_Finder(object):
 
     # Reads variables from text file 'config.ini'
     # If fails reading config,ini it will use built-in variables and signatures
+    # Helpful comments are provided in 'config.ini'
         
     config = configparser.ConfigParser()
     config.read(config_)
@@ -169,14 +176,13 @@ class Bdoc_Finder(object):
         Mounted images reading rely on MS Windows syntax 
         """
 
-        ### Variables ###
+        # Variables #
 
         start_carve_sector, end_carve_sector = [],[]
         current__cluster,_current__cluster = 0,0
 
         # Pointing to file and of file cluster total 
-        # number calculation
-        # Different methods for raw image file 
+        # number calculatio. Different methods are used for raw image file 
         # or for mounted drive
         
         try:
@@ -191,16 +197,15 @@ class Bdoc_Finder(object):
         file.seek(self.cluster_offset * self.sector)
         print('Clusters to analyse total:',str(_clusters_total),'...')
 
-        ### Scanning for headers and footers ###
+        # Scanning for headers and footers #
 
         while current__cluster <= _clusters_total:
 
             # This is reading one cluster and then moving 
             # the pointer one further cluster
             # This approach will not find 
-            # NTFS resident files 
-            # And this will not find ZIP files, 
-            # which are smaller than a cluster 
+            # NTFS resident files. And this will not find ZIP 
+            # files, which are smaller than a cluster 
             # Embedded signature and time-sresponses 
             # containing files are appr 13 Kb
             # So they can't really be residents
@@ -216,7 +221,7 @@ class Bdoc_Finder(object):
 
             # This will apply the header #
             
-            #header_lenght is the lenghts required for signature to work
+            # 'header_lenght' is the lenghts required for signature to work
             beginning_string_to_analyze = current_cluster[0:self.header_lenght]
             result = re.search(self.header_hex_code,beginning_string_to_analyze)
 
@@ -254,7 +259,7 @@ class Bdoc_Finder(object):
                                     end_carve_sector.append(int(self.cluster_offset)
                                      + (self.clusters_per_sectors)* (current__cluster))
                         
-                        cluster_tail_2 = file.read(self._cluster)[0:self.sector]  #This
+                        cluster_tail_2 = file.read(self._cluster)[0:self.sector]  # This
                         # is additional cluster-read, not the same read
                         joined_tail_2 = current_cluster + cluster_tail_2
                         result4 = re.search(self.footer_hex_code,joined_tail_2)
@@ -293,7 +298,7 @@ class Bdoc_Finder(object):
 
         data = b''
 
-        ### Copy sectors ###
+        # Copy sectors #
         
         if end_carve_sector - start_carve_sector < 51200:  # limitation of size 
             # as for appr 25 MB max. Large-scale web scrapping of registry showed 
@@ -315,7 +320,7 @@ class Bdoc_Finder(object):
     
     def read_files(self,file):
         
-        ''' Simply read the file '''
+        """ Simply read the file """
         
         with open(file,'rb') as f:
             data = f.read()
@@ -378,7 +383,8 @@ class Bdoc_Finder(object):
                     extra = str(extra)
                     extra = extra.replace(';','')
                     extra_file = comment_file + ', extra: ' + str(extra)
-                    if sys.version_info < (3, 0):
+                    if sys.version_info < (3, 0): 
+                        # Enables 'Short' CSV in Python2 from 'files'
                         extra_file = '\\x'.join(x.encode('hex') for x in extra_file)
                         extra_file = extra_file.decode('utf-8', errors = 'ignore')
                 else:
@@ -569,7 +575,7 @@ class Bdoc_Finder(object):
     
     def write_links_to_file(self,Resulting_CSV):
 
-        ''' Write recovered attributive data to file '''
+        """ Write recovered attributive data to file """
         
         if len(Resulting_CSV) == 0:
             print('No attributes were written.')
@@ -581,17 +587,17 @@ class Bdoc_Finder(object):
             len(Resulting_CSV)) + ".csv"
         filename = os.path.join(self.scriptfolder, basename)
 
-        if self.format_ == 'Long' and sys.version_info >= (3, 0):
-            # Encoding issues have not been solved for Python 2
-            line_by_line_file = open(filename, 'w', encoding = 'utf-8')
+        # Write CSV file
+        if sys.version_info >= (3, 0):
+            line_by_line_file = open(filename, 'w', encoding = 'utf-8-sig')
         else:
-            line_by_line_file = open(filename, 'w')
+            line_by_line_file = codecs.open(filename, 'w', 'utf-8-sig')
 
         for line in Resulting_CSV:
             try:
                 line_by_line_file.write("%s\n" % line)
             except Exception as e:
-                print("Failed writing line-to-line to file:",str(e))
+                 print("Failed writing line-by-line to file:",str(e))
 
         line_by_line_file.close()
 
@@ -638,7 +644,7 @@ if __name__ == "__main__":
                     
                     # Write recovered files #
 
-                    if testing_for_bdoc is True:
+                    if testing_for_bdoc:
                         if carve == 'True':
                             Bdoc_Finder().write_recovered_data_to_file(data,destination)
                         print(destination,'tested as BDOC, file size of',str(len(data)))
@@ -658,7 +664,7 @@ if __name__ == "__main__":
                     # Add ZIP #
                     
                     line_to_save = destination +';'+ list_of_files +';ZIP;' + comment +';'
-                    if testing_for_bdoc == True:
+                    if testing_for_bdoc:
                         Resulting_CSV.append(line_to_save)
 
                 iterator = 1    
@@ -678,7 +684,7 @@ if __name__ == "__main__":
                     # Collect results #
 
                     if len(short_values) > 0:
-                        if testing_for_bdoc == True:    
+                        if testing_for_bdoc:    
                             for line_ in short_values:
                                 short_line_to_save = destination +';'+ "Signature_" + str(iterator)+ ';'\
                                  + line_ + ';' + date_to_add
@@ -686,10 +692,11 @@ if __name__ == "__main__":
 
                     for each_value in found_values_text:
                         line_to_save = destination +';'+ list_of_files +';XML;'+ each_value +';'
-                        if testing_for_bdoc == True:
+                        if testing_for_bdoc:
                             Resulting_CSV.append(line_to_save)
                     for each_value in found_values_ASN_decoded:
-                        line_to_save = destination +';'+ list_of_files +';ASN.1;'+ each_value +';'
+                        line_to_save = destination +';'+ list_of_files + ';ASN.1;' + each_value +';'
+                            
                         if testing_for_bdoc == True:
                             Resulting_CSV.append(line_to_save)
                     
@@ -728,7 +735,7 @@ if __name__ == "__main__":
                             
                             # Write recovered files #
                             
-                            if testing_for_bdoc is True:
+                            if testing_for_bdoc:
                                 print(destination,'recovered a BDOC, file size of',str(len(data)))
                                 if carve == 'True':
                                     Bdoc_Finder().write_recovered_data_to_file(data,destination)
@@ -744,7 +751,7 @@ if __name__ == "__main__":
                         for comment in comments:
                             
                             # Add ZIP #
-                            
+
                             line_to_save = destination +';'+ list_of_files +';ZIP;'+ comment +';'
                             Resulting_CSV.append(line_to_save)
 
