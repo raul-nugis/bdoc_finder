@@ -1,25 +1,26 @@
 # coding: utf-8
 
-""" 
+"""
 This script will read raw images, mounted image
 and / or DSD candidate files from subfolder.
-Workflow is somewhat different if it is candidate 
+Workflow is somewhat different if it is candidate
 file read from folder, or candidate file
 undeleted from raw/mounted image. Checks
-and recovery for potential files in images are 
+and recovery for potential files in images are
 based on hex regex signature.
 Checks for potential files read from folders
  are based on their internal structure.
-Potentially DSD files with wrong structure are marked 
-as malformed. Check on existent files enables quick 
+Potentially DSD files with wrong structure are marked
+as malformed. Check on existent files enables quick
 separation of DSDs from other ZIP like containers.
 """
 
 # This addresses Dec 2017 bug on Win10
 # https://bugs.python.org/issue32245
-
-import win_unicode_console, os, logging
-win_unicode_console.enable()
+import os
+if os.name == 'nt':
+    import win_unicode_console, logging
+    win_unicode_console.enable()
 
 import re
 import io
@@ -36,13 +37,13 @@ from pyasn1.codec.der import decoder as decoder
 
 # If Python v 2
 if sys.version_info < (3, 0):
-    reload(sys)  
+    reload(sys)
     sys.setdefaultencoding('utf8')
 
 class Bdoc_Finder(object):
 
     """ This is the class with functions for detecting DSD and extracting their data """
-    
+
     # Checks for config.ini depending on execution in local or remote dir
     if os.path.dirname(os.path.realpath(__file__)) == os.getcwd():
         config_ = 'config.ini'
@@ -52,7 +53,7 @@ class Bdoc_Finder(object):
     # Reads variables from text file 'config.ini'
     # If fails reading config,ini it will use built-in variables and signatures
     # Helpful comments are provided in 'config.ini'
-        
+
     config = configparser.ConfigParser()
     config.read(config_)
     try:
@@ -101,18 +102,18 @@ class Bdoc_Finder(object):
             '{http://uri.etsi.org/01903/v1.3.2#}ProducedAt']
         position = ['3','4','5']
         # These regexes exceed recommended 79 character wrapping lenghts style
-        # Wrapping them, given that they have "" and '' and / and \ and 'binary' 
+        # Wrapping them, given that they have "" and '' and / and \ and 'binary'
         # is exceedingly difficult.
         header_hex_code  = r"b'^PK\x03\x04(.|\s){26}mimetype(.|\s){0,36}(application\/vnd\.etsi\.asic\-e\+zip|K,\(\\\xc8\xc9LN,\xc9\xcc\xcf\xd3\/\xcbK\xd1K)'"
         footer_hex_code = r"b'PK\x05\x06\x00\x00(.|\s){14}.*?(\x00{2}|.*[ -~])'"
         mounted_size = 0
-    
+
     # Can read folder where files are from commandline
     if len(sys.argv) > 1:
         file = str(sys.argv[1])
 
     def __init__(self):
-       
+
         # Additional comments and explanations on variables are in 'config.ini'
         if self.scriptfolder == 'script':
             self.scriptfolder = os.path.dirname(os.path.realpath(__file__))
@@ -135,7 +136,7 @@ class Bdoc_Finder(object):
         else:
             self.carve is False
 
-        self.images = [] 
+        self.images = []
         self.image = os.path.join(self.scriptfolder, self.image, '*')
         for filename in sorted(glob.glob(self.image)):
             self.images.append(filename)
@@ -143,7 +144,7 @@ class Bdoc_Finder(object):
             self.images.append(self.mounted)
             self.mounted_size = int(self.mounted_size)
 
-        self.files = [] 
+        self.files = []
         self.file = os.path.join(self.scriptfolder, self.file, '*')
         for filename in sorted(glob.glob(self.file)):
             self.files.append(filename)
@@ -151,7 +152,7 @@ class Bdoc_Finder(object):
         result = os.path.join(self.scriptfolder, self.result)
         if not os.path.exists(result):
             os.makedirs(result)
-        
+
         self.position =  list(map(int, self.position))
 
         self.clusters_per_sectors = int(self.clusters_per_sectors)
@@ -163,17 +164,17 @@ class Bdoc_Finder(object):
         self.header_hex_code = re.compile(self.header_hex_code)
         self.footer_hex_code = ast.literal_eval(self.footer_hex_code)
         self.footer_hex_code = re.compile(self.footer_hex_code)
-        
+
         if len(self.cluster_offset) != 0:
             self.cluster_offset = int(self.cluster_offset)
-                      
+
     def discover_sectors(self,image):
         """
-        This is the function for scanner, which will scan 
+        This is the function for scanner, which will scan
         DD image or mounted image and find all starts and ends
         or Headers and Footers of corresponding files
         provided contiguous clusters and HDD like geometry
-        Mounted images reading rely on MS Windows syntax 
+        Mounted images reading rely on MS Windows syntax
         """
 
         # Variables #
@@ -181,10 +182,10 @@ class Bdoc_Finder(object):
         start_carve_sector, end_carve_sector = [],[]
         current__cluster,_current__cluster = 0,0
 
-        # Pointing to file and of file cluster total 
-        # number calculatio. Different methods are used for raw image file 
+        # Pointing to file and of file cluster total
+        # number calculatio. Different methods are used for raw image file
         # or for mounted drive
-        
+
         try:
             file = open(image, 'rb')
         except Exception as e:
@@ -201,15 +202,15 @@ class Bdoc_Finder(object):
 
         while current__cluster <= _clusters_total:
 
-            # This is reading one cluster and then moving 
+            # This is reading one cluster and then moving
             # the pointer one further cluster
-            # This approach will not find 
-            # NTFS resident files. And this will not find ZIP 
-            # files, which are smaller than a cluster 
-            # Embedded signature and time-sresponses 
+            # This approach will not find
+            # NTFS resident files. And this will not find ZIP
+            # files, which are smaller than a cluster
+            # Embedded signature and time-sresponses
             # containing files are appr 13 Kb
             # So they can't really be residents
-            # This approach will not find 
+            # This approach will not find
             # non-contiguously clustered files
 
             try:
@@ -220,7 +221,7 @@ class Bdoc_Finder(object):
             current__cluster += 1
 
             # This will apply the header #
-            
+
             # 'header_lenght' is the lenghts required for signature to work
             beginning_string_to_analyze = current_cluster[0:self.header_lenght]
             result = re.search(self.header_hex_code,beginning_string_to_analyze)
@@ -258,7 +259,7 @@ class Bdoc_Finder(object):
                                 else:
                                     end_carve_sector.append(int(self.cluster_offset)
                                      + (self.clusters_per_sectors)* (current__cluster))
-                        
+
                         cluster_tail_2 = file.read(self._cluster)[0:self.sector]  # This
                         # is additional cluster-read, not the same read
                         joined_tail_2 = current_cluster + cluster_tail_2
@@ -286,7 +287,7 @@ class Bdoc_Finder(object):
         file.close()
 
         return start_carve_sector,end_carve_sector
-    
+
     def recover_data_from_sectors(
         self,image,
         start_carve_sector,
@@ -299,29 +300,29 @@ class Bdoc_Finder(object):
         data = b''
 
         # Copy sectors #
-        
-        if end_carve_sector - start_carve_sector < 51200:  # limitation of size 
-            # as for appr 25 MB max. Large-scale web scrapping of registry showed 
+
+        if end_carve_sector - start_carve_sector < 51200:  # limitation of size
+            # as for appr 25 MB max. Large-scale web scrapping of registry showed
             # that 72% of documents come with email. It is anecdotically known that
             # in public sector frequent max size of email attachments is set to 25 MB
-            file = open(image, 'rb')    
+            file = open(image, 'rb')
             file.seek(start_carve_sector*self.sector)
             data = file.read((end_carve_sector)*self.sector
              - start_carve_sector*self.sector)
             file.close()
 
-            result = re.search(self.footer_hex_code,data)  # Apply improved 
-            # footer to achieve MD5 match   
+            result = re.search(self.footer_hex_code,data)  # Apply improved
+            # footer to achieve MD5 match
             if result:
                 end = result.span()[1]
                 data = data[0:end]
 
         return data
-    
+
     def read_files(self,file):
-        
+
         """ Simply read the file """
-        
+
         with open(file,'rb') as f:
             data = f.read()
         return data
@@ -330,7 +331,7 @@ class Bdoc_Finder(object):
 
         """
         This will test if data is ZIP and DSD and export signature
-        """  
+        """
 
         # Variables and Checks #
 
@@ -363,14 +364,14 @@ class Bdoc_Finder(object):
         # Check if signature file exists #
 
         comment_ZIP,comment_file,extra_file = '','',''
-        
+
         if len(list_of_ZIP) > 0:
             comment_ZIP = zipfile.comment
             if len(comment_ZIP) > 0:
                 comment_ZIP = 'ZIP_comment: ' + str(comment_ZIP)
             else:
                 comment_ZIP = 'no_ZIP_Comment'
-            
+
             for file in list_of_ZIP:
                 comment_ = zipfile.getinfo(file.filename).comment
                 if len(comment_) > 0:
@@ -383,16 +384,16 @@ class Bdoc_Finder(object):
                     extra = str(extra)
                     extra = extra.replace(';','')
                     extra_file = comment_file + ', extra: ' + str(extra)
-                    if sys.version_info < (3, 0): 
+                    if sys.version_info < (3, 0):
                         # Enables 'Short' CSV in Python2 from 'files'
                         extra_file = '\\x'.join(x.encode('hex') for x in extra_file)
                         extra_file = extra_file.decode('utf-8', errors = 'ignore')
                 else:
                     extra_file = comment_file + ', no_extra'
                 comment.append(extra_file)
-                list_of_DSD.append(file.filename)    
-                
-                if (file.filename.find('META-INF') == -1 and 
+                list_of_DSD.append(file.filename)
+
+                if (file.filename.find('META-INF') == -1 and
                     file.filename.find('mimetype') == -1):
                     if len(list_of_files) == 0:
                         list_of_files = list_of_files + file.filename
@@ -415,14 +416,14 @@ class Bdoc_Finder(object):
                     except Exception as e:
                         print('Could not extract signature file from DSD because of',str(e))
                         unziped_SIG.append('')
-                        
+
             return comment,testing_for_DSD,list_of_DSD,unziped_SIG,list_of_files
-        
+
     def parce_sig_XML(self,unziped_SIG):
 
         """
         This will parce XML and export meaningful XML elements and ASN.1 encoded data.
-        """ 
+        """
 
         # Variables to store results #
 
@@ -436,7 +437,7 @@ class Bdoc_Finder(object):
         except:
             try:
                 root_f = ET.fromstring(unziped_SIG[0])
-            except TypeError as e:
+            except Exception as e:
                 print('XML parcing failed:',str(e))
                 return found_values_text,found_values_Base64,found_values_ASN_1
 
@@ -467,7 +468,7 @@ class Bdoc_Finder(object):
                 found_values_ASN_1.append(text)
 
         return found_values_text,found_values_Base64,found_values_ASN_1
-    
+
     def parce_cert(self,found_values_ASN_1,found_values_Base64):
 
         """
@@ -476,8 +477,7 @@ class Bdoc_Finder(object):
 
         # Variables to store results #
 
-        found_values_ASN_decoded = []
-        short_values = []
+        found_values_ASN_decoded,short_values = [],[]
         date_to_add = ''
 
         # Decode X509Certificate and Responses #
@@ -487,8 +487,9 @@ class Bdoc_Finder(object):
             ASN_tag = ASN_tag.split(";")[0]
             ASN_tag = ASN_tag.split("}")[1]
 
+
             if ASN_tag =='EncapsulatedTimeStamp' or ASN_tag =='EncapsulatedOCSPValue':
-                try:
+                try: # This user-friendly parcing of Time Stamps and Time Marks
                     decoded_base64_OSCP = base64.b64decode(encoded_ASN_1_datablock)
                 except:
                     error = 'Base64 decode failed in ' + ASN_tag
@@ -499,7 +500,7 @@ class Bdoc_Finder(object):
                 result_date = re.search(date,decoded_base64_OSCP)
                 if result_date:
                     if result_date.group(0) is not None:
-                        
+
                         # Rewrites date to more human readable format #
                         date_to_add = str(result_date.group(0))
                         date_to_add = date_to_add.replace("b'","'")
@@ -511,7 +512,8 @@ class Bdoc_Finder(object):
                           + ':' + date_to_add[10:12]  + ':' + date_to_add[12:]
                         found_values_ASN_decoded.append(date_to_add)
 
-            if ASN_tag =='X509Certificate':
+            if ASN_tag =='X509Certificate': # This is the personal
+                # certificate decoding
                 try:
                     decoded_base64 = base64.b64decode(encoded_ASN_1_datablock)
                 except:
@@ -532,9 +534,9 @@ class Bdoc_Finder(object):
                             pcode = ASN_objects.getComponentByPosition(0)[0][1]
                         else:
                             pcode = ASN_objects.getComponentByPosition(6)[0][1]
-                        short_values.append(lname + fname + pcode)                        
+                        short_values.append(lname + fname + pcode)
                     else:
-                        
+
                         # Makes long list, see 'config.ini' #
                         # place = 3, this is about Certification Authority
                         # place = 5, this is personal data
@@ -547,7 +549,7 @@ class Bdoc_Finder(object):
                                 if place == 4:
                                     ASN_value_to_add = name_object
                                     found_values_ASN_decoded.append(ASN_value_to_add)
-                                
+
                                 else:
                                     for ASN_object in range(len(name_object)):
                                         ASN_value_to_add = name_object.getComponentByPosition(ASN_object)[1]
@@ -558,25 +560,25 @@ class Bdoc_Finder(object):
                     found_values_ASN_decoded.append(error)
                     short_values.append(error)
                     break
-                               
+
         return found_values_ASN_decoded,short_values,date_to_add
-    
+
     def write_recovered_data_to_file(self,data,destination):
 
         """
-        This will save recovered file data to a file in Results folder, 
+        This will save recovered file data to a file in Results folder,
         provided a name was given.
-        """    
+        """
         destination = os.path.join(self.scriptfolder,self.result,destination)
         if len(data) > 0:
             file = open(destination, 'wb')
             file.write(data)
             file.close()
-    
+
     def write_links_to_file(self,Resulting_CSV):
 
         """ Write recovered attributive data to file """
-        
+
         if len(Resulting_CSV) == 0:
             print('No attributes were written.')
             return
@@ -590,7 +592,7 @@ class Bdoc_Finder(object):
         # Write CSV file
         if sys.version_info >= (3, 0):
             line_by_line_file = open(filename, 'w', encoding = 'utf-8-sig')
-        else:
+        else: # Syntax different for Python2 (work in progress)
             line_by_line_file = codecs.open(filename, 'w', 'utf-8-sig')
 
         for line in Resulting_CSV:
@@ -601,10 +603,11 @@ class Bdoc_Finder(object):
 
         line_by_line_file.close()
 
-        print('File',basename,'of',str(len(Resulting_CSV)),'lines written in folder',self.scriptfolder)
+        print('File',basename,'of',str(len(
+            Resulting_CSV)),'lines written in folder',self.scriptfolder)
 
 if __name__ == "__main__":
-    
+
     startTime = datetime.now()
 
     # Variables from setup #
@@ -625,7 +628,7 @@ if __name__ == "__main__":
         print('No files neither images were found to read files from.')
 
     else:
-            
+
         # If files are found in subfolder #
 
         if len(files) > 0:
@@ -635,13 +638,13 @@ if __name__ == "__main__":
                 destination = file.split('\\')[-1]
                 destination = destination.split('/')[-1]
                 try:
-                    
+
                     # Unzip signature and recover file #
-                    
+
                     comments,testing_for_bdoc,list_of_DSD,unziped_SIG,list_of_files = Bdoc_Finder(
 
                     ).test_for_possible_bdoc(data)
-                    
+
                     # Write recovered files #
 
                     if testing_for_bdoc:
@@ -651,55 +654,55 @@ if __name__ == "__main__":
                     else:
                         if any("manifest.xml" in _file for _file in list_of_DSD):
                             # Known files having manifest.xml but there are files
-                            # without signature. They include: unsigned BDOC, 
+                            # without signature. They include: unsigned BDOC,
                             # unsigned ASICE; also: ODT, ODF files
                             print('Possible unsigned BDOC',destination,'detected, file size',str(len(data)))
                         else:
                             print(destination,'failed BDOC test, file size',str(len(data)))
                 except Exception as e:
                     print('Failed trying to check if',destination,'ZIP because of',str(e))
-                
+
                 for comment in comments:
-                    
+
                     # Add ZIP #
-                    
-                    line_to_save = destination +';'+ list_of_files +';ZIP;' + comment +';'
+
+                    line_to_save = destination +';'+ list_of_files +';ZIP;' + comment
                     if testing_for_bdoc:
                         Resulting_CSV.append(line_to_save)
 
-                iterator = 1    
+                iterator = 1
                 for unziped_SIG in unziped_SIG:
 
                     # Parce XML #
-                
+
                     found_values_text,found_values_Base64,found_values_ASN_1 = Bdoc_Finder(
 
                     ).parce_sig_XML(unziped_SIG)
-                    
+
                     # Decode ASN.1 #
-                
+
                     found_values_ASN_decoded,short_values,date_to_add = Bdoc_Finder().parce_cert(
                         found_values_ASN_1,found_values_Base64)
 
                     # Collect results #
 
                     if len(short_values) > 0:
-                        if testing_for_bdoc:    
+                        if testing_for_bdoc:
                             for line_ in short_values:
                                 short_line_to_save = destination +';'+ "Signature_" + str(iterator)+ ';'\
                                  + line_ + ';' + date_to_add
                                 Short_csv.append(short_line_to_save)
 
                     for each_value in found_values_text:
-                        line_to_save = destination +';'+ list_of_files +';XML;'+ each_value +';'
+                        line_to_save = destination +';'+ list_of_files +';XML;'+ each_value
                         if testing_for_bdoc:
                             Resulting_CSV.append(line_to_save)
                     for each_value in found_values_ASN_decoded:
-                        line_to_save = destination +';'+ list_of_files + ';ASN.1;' + each_value +';'
-                            
+                        line_to_save = destination +';'+ list_of_files + ';ASN.1;' + each_value
+
                         if testing_for_bdoc == True:
                             Resulting_CSV.append(line_to_save)
-                    
+
                     iterator += 1
 
                 line_to_save = ''
@@ -709,9 +712,9 @@ if __name__ == "__main__":
 
             for image in images:
                 print('Scanning image',image)
-                
+
                 # Scan image #
-                        
+
                 start_carve_sector,end_carve_sector = Bdoc_Finder().discover_sectors(image)
 
                 # Carve data #
@@ -726,15 +729,15 @@ if __name__ == "__main__":
                         destination = str(start_carve_sector) + '_' + str(end_carve_sector) \
                         + '_' + destination + '.bdoc'
                         try:
-                            
+
                             # Unzip signature and recover file #
 
                             comments,testing_for_bdoc,list_of_DSD,unziped_SIG,list_of_files = Bdoc_Finder(
 
                             ).test_for_possible_bdoc(data)
-                            
+
                             # Write recovered files #
-                            
+
                             if testing_for_bdoc:
                                 print(destination,'recovered a BDOC, file size of',str(len(data)))
                                 if carve == 'True':
@@ -743,55 +746,53 @@ if __name__ == "__main__":
                                 print(destination,'failed BDOC test',str(len(data)))
                                 destination = 'Malformed_' + destination
                                 if carve == 'True':
-                                    Bdoc_Finder().write_recovered_data_to_file(data,destination)                
-                            
+                                    Bdoc_Finder().write_recovered_data_to_file(data,destination)
+
                         except Exception as e:
-                            print('Failed trying to check if',destination,'ZIP because of',str(e))   
-                    
+                            print('Failed trying to check if',destination,'ZIP because of',str(e))
+
                         for comment in comments:
-                            
+
                             # Add ZIP #
 
-                            line_to_save = destination +';'+ list_of_files +';ZIP;'+ comment +';'
+                            line_to_save = destination +';'+ list_of_files +';ZIP;'+ comment
                             Resulting_CSV.append(line_to_save)
 
-                        iterator = 1    
+                        iterator = 1
                         for unziped_SIG in unziped_SIG:
 
                             # Parce XML #
-                        
+
                             found_values_text,found_values_Base64,found_values_ASN_1 = Bdoc_Finder(
 
                             ).parce_sig_XML(unziped_SIG)
-                            
+
                             # Decode ASN.1 #
-                        
+
                             found_values_ASN_decoded,short_values,date_to_add = Bdoc_Finder().parce_cert(
                                 found_values_ASN_1,found_values_Base64)
-                            
+
                             # Collect results #
 
                             if len(short_values) > 0:
-                                if testing_for_bdoc == True:    
+                                if testing_for_bdoc == True:
                                     for line_ in short_values:
                                         short_line_to_save = destination +';'+ "Signature_" + str(iterator)+ ';'\
                                          + line_ + ';' + date_to_add
                                         Short_csv.append(short_line_to_save)
 
                             for each_value in found_values_text:
-                                line_to_save = destination +';'+ list_of_files +';XML;'+ each_value +';'
+                                line_to_save = destination +';'+ list_of_files +';XML;'+ each_value
                                 Resulting_CSV.append(line_to_save)
                             for each_value in found_values_ASN_decoded:
-                                line_to_save = destination +';'+ list_of_files +';ASN.1;'+ each_value +';'
+                                line_to_save = destination +';'+ list_of_files +';ASN.1;'+ each_value
                                 Resulting_CSV.append(line_to_save)
 
                             iterator += 1
 
                         line_to_save = ''
 
-    # Write collected data to XLSX file #
-    # Can be replaced with 'write_links_to_file'
-    # To export to CSV
+    # To export to CSV depending on format, 'Long' or 'Short'
 
     if len(Resulting_CSV) > 1 and Bdoc_Finder().format_ == 'Long':
         Bdoc_Finder().write_links_to_file(Resulting_CSV)
